@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { 
   View, 
   Text, 
@@ -22,7 +22,8 @@ import { useAuth } from '../contexts/AuthContext';
 import { supabase, DEV_MODE } from '../lib/supabase';
 import * as ImagePicker from 'expo-image-picker';
 import { randomUUID } from 'expo-crypto';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useIsFocused, CommonActions } from '@react-navigation/native';
+import { Ionicons } from '@expo/vector-icons';
 
 // Importar tipos específicos
 import { NavigationProp } from '@react-navigation/native';
@@ -74,12 +75,47 @@ const FeedScreen = () => {
   const scrollY = useRef(new Animated.Value(0)).current;
 
   const fetchPosts = async () => {
-    if (refreshing) return;
+    if (refreshing || !user) { // Asegurarse de que el usuario está autenticado
+      if (!user) console.log('Usuario no autenticado, no se pueden cargar posts.');
+      setLoading(false);
+      setRefreshing(false);
+      return;
+    }
     
     setLoading(true);
+    console.log('🔄 Cargando posts para el usuario:', user.id);
+    
     try {
-      // Aquí obtenemos posts reales desde Supabase
-      const { data, error } = await supabase
+      // 1. Obtener la lista de IDs de amigos aceptados
+      const { data: friendsData, error: friendsError } = await supabase
+        .from('friends') // Asegúrate que este sea el nombre correcto de tu tabla
+        .select('friend_id')
+        .eq('user_id', user.id)
+        .eq('status', 'accepted'); // Asumiendo que 'accepted' es el estado de amistad mutua
+
+      if (friendsError) {
+        console.error('Error fetching friends:', friendsError);
+        // Considerar mostrar datos de prueba o manejar el error
+        if (DEV_MODE) setPosts(generateMockPosts()); 
+        return;
+      }
+
+      const friendIds = friendsData?.map(f => f.friend_id) || [];
+      // Incluir también los posts del propio usuario
+      const userAndFriendIds = [...friendIds, user.id]; 
+      
+      console.log('👥 IDs de amigos (y propio usuario) para cargar posts:', userAndFriendIds);
+
+      if (userAndFriendIds.length === 0) {
+          console.log('El usuario no tiene amigos aceptados y no se incluirán sus propios posts.');
+          setPosts([]); // No hay posts para mostrar
+          setLoading(false);
+          setRefreshing(false);
+          return;
+      }
+
+      // 2. Obtener los posts de esos usuarios (amigos + propio usuario)
+      const { data: postsData, error: postsError } = await supabase
         .from('posts')
         .select(`
           id,
@@ -88,62 +124,44 @@ const FeedScreen = () => {
           created_at,
           profiles (username, avatar_url)
         `)
+        // Filtrar por los IDs obtenidos
+        .in('user_id', userAndFriendIds)
         .order('created_at', { ascending: false });
-      
-      if (error) {
-        console.error('Error fetching posts:', error);
-        // Si estamos en modo desarrollo, generamos datos de prueba en caso de error
-        if (DEV_MODE) {
-          console.log('Modo desarrollo: Generando posts de prueba');
-          setPosts(generateMockPosts());
-        }
+
+      if (postsError) {
+        console.error('Error fetching posts:', postsError);
+        if (DEV_MODE) setPosts(generateMockPosts());
         return;
       }
-      
-      // Usar datos de prueba si no hay datos reales
-      if (!data || data.length === 0) {
-        console.log('No se encontraron posts, mostrando datos de prueba');
-        const mockPosts = generateMockPosts();
+
+      // 3. Formatear y establecer los posts
+      if (!postsData || postsData.length === 0) {
+        console.log('No posts found from friends or self, showing mock posts in DEV_MODE');
+        const mockPosts = DEV_MODE ? generateMockPosts() : [];
         setPosts(mockPosts);
       } else {
-        // Transformar los datos para nuestro formato
-        const formattedPosts = data.map(post => {
-          // Extraemos los datos del perfil de manera segura
-          const profileData = post.profiles as unknown;
-          let username = 'Usuario';
-          let avatar_url: string | undefined = undefined;
-          
-          // Verificamos si profiles tiene los datos que necesitamos
-          if (profileData && typeof profileData === 'object') {
-            if ('username' in profileData && typeof profileData.username === 'string') {
-              username = profileData.username;
-            }
-            if ('avatar_url' in profileData && typeof profileData.avatar_url === 'string') {
-              avatar_url = profileData.avatar_url;
-            }
-          }
-          
+        const formattedPosts = postsData.map(post => {
+          const profileData = post.profiles as any; // Usar 'any' temporalmente
           return {
             id: post.id,
             user_id: post.user_id,
             image_url: post.image_url,
             created_at: post.created_at,
-            username,
-            avatar_url
+            username: profileData?.username || 'Usuario',
+            avatar_url: profileData?.avatar_url
           };
         });
-        
+        console.log(`✅ ${formattedPosts.length} posts cargados.`);
         setPosts(formattedPosts);
       }
+
     } catch (error) {
-      console.error('Error in fetchPosts:', error);
-      if (DEV_MODE) {
-        console.log('Modo desarrollo: Generando posts de prueba después de error');
-        setPosts(generateMockPosts());
-      }
+      console.error('Error general en fetchPosts:', error);
+      if (DEV_MODE) setPosts(generateMockPosts());
     } finally {
       setLoading(false);
       setRefreshing(false);
+      console.log('⏹️ Proceso de carga de posts finalizado.');
     }
   };
 
@@ -287,6 +305,16 @@ const FeedScreen = () => {
     }
   };
 
+  // Simplificar la navegación a Settings
+  const handleSettingsPress = () => {
+    // Mostrar mensaje indicando cómo acceder a Settings
+    Alert.alert(
+      'Configuración', 
+      'Por favor, usa la pestaña "Settings" en la barra inferior para acceder a la configuración.',
+      [{ text: 'Entendido' }]
+    );
+  };
+
   // Renderiza un post individual
   const renderPost = ({ item, index }: { item: Post, index: number }) => (
     <View style={styles.fullScreenPostContainer}>
@@ -307,34 +335,9 @@ const FeedScreen = () => {
           <Text style={styles.username}>{item.username}</Text>
         </View>
 
-        {/* Botón de Configuración (derecha) - Usando getParent con Logs */}
+        {/* Botón de Configuración (derecha) - Navegación simplificada */}
         <TouchableOpacity 
-          onPress={() => {
-            console.log("--- Botón Configuración Presionado ---");
-            console.log("Objeto navigation actual:", navigation);
-            // Obtener el navegador padre (StackNavigator)
-            const parentNav = navigation.getParent();
-            console.log("Objeto parentNav (resultado de getParent()):", parentNav);
-            
-            if (parentNav) {
-              console.log("Intentando: parentNav.navigate('Main', { screen: 'Settings' })");
-              try {
-                parentNav.navigate('Main', { screen: 'Settings' });
-                console.log("parentNav.navigate llamado sin error inmediato.");
-              } catch (e) {
-                console.error("Error DENTRO de la llamada a parentNav.navigate:", e);
-              }
-            } else {
-              console.warn('No se pudo obtener el navegador padre. Intentando navigate normal...');
-              try {
-                console.log("Intentando: navigation.navigate('Settings')");
-                navigation.navigate('Settings'); // Fallback por si getParent falla
-              } catch (e) {
-                 console.error("Error DENTRO de la llamada a navigation.navigate:", e);
-              }
-            }
-            console.log("--- Fin Handler Botón Configuración ---");
-          }}
+          onPress={handleSettingsPress}
           style={styles.settingsButton}
         >
           <Text style={styles.settingsIcon}>⚙️</Text>

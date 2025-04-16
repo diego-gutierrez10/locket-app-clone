@@ -5,6 +5,8 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import NetInfo from '@react-native-community/netinfo';
 import Navigation from './src/navigation';
 import { AuthProvider } from './src/contexts/AuthContext';
+import { UserPreferencesProvider } from './src/contexts/UserPreferencesContext';
+import { ThemeProvider } from './src/contexts/ThemeContext';
 import { initializeDatabase, DEV_MODE, ensurePhotoBucket } from './src/lib/supabase';
 
 export default function App() {
@@ -104,9 +106,13 @@ export default function App() {
           <Text style={styles.devModeText}>MODO DESARROLLO</Text>
         </View>
       )}
-      <AuthProvider>
-        <Navigation />
-      </AuthProvider>
+      <ThemeProvider>
+        <UserPreferencesProvider>
+          <AuthProvider>
+            <Navigation />
+          </AuthProvider>
+        </UserPreferencesProvider>
+      </ThemeProvider>
     </SafeAreaProvider>
   );
 }

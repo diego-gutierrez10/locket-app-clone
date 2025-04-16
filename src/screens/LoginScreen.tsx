@@ -10,11 +10,13 @@ import {
   Platform,
   ActivityIndicator,
   Alert,
-  StatusBar
+  StatusBar,
+  Keyboard
 } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { AuthStackParamList } from '../navigation';
 import { useAuth } from '../contexts/AuthContext';
+import { supabase } from '../lib/supabase';
 
 type Props = NativeStackScreenProps<AuthStackParamList, 'Login'>;
 
@@ -22,6 +24,7 @@ const LoginScreen = ({ navigation }: Props) => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [isResetting, setIsResetting] = useState(false);
   
   const { signIn } = useAuth();
 
@@ -43,6 +46,36 @@ const LoginScreen = ({ navigation }: Props) => {
       Alert.alert('Error', error.message || 'Falló el inicio de sesión');
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleForgotPassword = async () => {
+    if (!email) {
+      Alert.alert("Error", "Por favor ingresa tu correo electrónico.");
+      return;
+    }
+    setIsResetting(true);
+    Keyboard.dismiss();
+
+    try {
+      const redirectUrl = 'locketapp://'; 
+
+      console.log('Solicitando reseteo. Redirigiendo SOLO a scheme base (Reaplicado):', redirectUrl);
+
+      const { data, error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: redirectUrl, 
+      });
+
+      if (error) {
+        throw error;
+      } else {
+        Alert.alert('Éxito', 'Revisa tu correo para el enlace de recuperación.');
+      }
+    } catch (err: any) {
+      console.error("🔑 Excepción en resetPasswordForEmail:", err);
+      Alert.alert("Error", err.message || "Ocurrió un error al solicitar el reseteo.");
+    } finally {
+      setIsResetting(false);
     }
   };
 
@@ -92,8 +125,16 @@ const LoginScreen = ({ navigation }: Props) => {
               secureTextEntry
             />
 
-            <TouchableOpacity style={styles.forgotPassword}>
-              <Text style={styles.forgotPasswordText}>Forgot password?</Text>
+            <TouchableOpacity 
+              style={styles.forgotPassword}
+              onPress={handleForgotPassword}
+              disabled={isResetting}
+            >
+              {isResetting ? (
+                <ActivityIndicator size="small" color="#5DA9E9" />
+              ) : (
+                <Text style={styles.forgotPasswordText}>Forgot password?</Text>
+              )}
             </TouchableOpacity>
           </View>
           

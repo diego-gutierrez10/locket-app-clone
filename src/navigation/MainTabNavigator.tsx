@@ -7,52 +7,74 @@ import ProfileScreen from '../screens/ProfileScreen';
 import CameraScreen from '../screens/CameraScreen';
 // import FriendsScreen from '../screens/FriendsScreen';
 import SimpleFriendsScreen from '../screens/SimpleFriendsScreen';
-import SettingsScreen from '../screens/SettingsScreen';
+// import SettingsNavigator from './SettingsNavigator';
+import SettingsMainScreen from '../screens/settings/SettingsMainScreen';
+import UploadScreen from '../screens/UploadScreen';
+import { COLORS } from '../constants/colors';
 
 const Tab = createBottomTabNavigator();
 
 const MainTabNavigator = () => {
   return (
     <Tab.Navigator
+      initialRouteName="Feed"
       screenOptions={({ route }) => ({
         tabBarIcon: ({ focused, color, size }) => {
-          let iconName: keyof typeof Ionicons.glyphMap | undefined;
+          let iconName;
 
           if (route.name === 'Feed') {
             iconName = focused ? 'home' : 'home-outline';
-          } else if (route.name === 'Profile') {
-            iconName = focused ? 'person' : 'person-outline';
+          } else if (route.name === 'Upload') {
+            iconName = focused ? 'cloud-upload' : 'cloud-upload-outline';
           } else if (route.name === 'Camera') {
             iconName = focused ? 'camera' : 'camera-outline';
-          } else if (route.name === 'Friends') {
-            iconName = focused ? 'people' : 'people-outline';
           } else if (route.name === 'Settings') {
             iconName = focused ? 'settings' : 'settings-outline';
           }
 
-          if (!iconName) {
-            iconName = 'alert-circle-outline';
-          }
-
+          // @ts-ignore
           return <Ionicons name={iconName} size={size} color={color} />;
         },
-        tabBarActiveTintColor: '#FFFFFF',
-        tabBarInactiveTintColor: '#A0A0A0',
-        headerShown: false,
-        tabBarStyle: {
-          backgroundColor: '#003F91',
-          borderTopWidth: 0,
-          elevation: 0,
-          height: 60,
-          paddingBottom: 10,
+        tabBarActiveTintColor: COLORS.primary,
+        tabBarInactiveTintColor: 'gray',
+        headerStyle: {
+          backgroundColor: COLORS.primary,
         },
-        tabBarShowLabel: false,
+        headerTintColor: '#fff',
+        headerTitleStyle: {
+          fontWeight: 'bold',
+        },
       })}
     >
-      <Tab.Screen name="Feed" component={FeedScreen} />
-      <Tab.Screen name="Camera" component={CameraScreen} />
-      <Tab.Screen name="Friends" component={SimpleFriendsScreen} />
-      <Tab.Screen name="Settings" component={SettingsScreen} />
+      <Tab.Screen 
+        name="Feed" 
+        component={FeedScreen} 
+        options={{
+          title: 'Inicio',
+        }}
+      />
+      <Tab.Screen 
+        name="Camera" 
+        component={CameraScreen} 
+        options={{
+          title: 'Cámara',
+        }}
+      />
+      <Tab.Screen 
+        name="Upload" 
+        component={UploadScreen} 
+        options={{
+          title: 'Subir',
+        }}
+      />
+      <Tab.Screen 
+        name="Settings" 
+        component={SettingsMainScreen} 
+        options={{
+          title: 'Configuración',
+          headerShown: false,
+        }}
+      />
     </Tab.Navigator>
   );
 };
